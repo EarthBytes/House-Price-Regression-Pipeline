@@ -4,7 +4,7 @@ An end-to-end machine learning pipeline for Kaggle's [House Prices: Advanced Reg
 
 **Achievement: Top 100 worldwide Kaggle ranking (rank 97 at the time of writing), with a leaderboard RMSE of 0.11667.**
 
-![Kaggle leaderboard](images/leaderboard.png)
+![Kaggle leaderboard](images/top100leaderboard.png)
 
 > **Note:** the final submission pipeline that produced the top-100 result is kept private. This repository documents the approach and provides an example implementation.
 
