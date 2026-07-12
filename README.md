@@ -1,94 +1,72 @@
 # Kaggle House Prices - Advanced Regression Techniques
 
-End-to-end machine learning pipeline for predicting residential sale prices in Ames, Iowa using advanced feature engineering, per-model hyperparameter optimisation and weighted ensemble learning.
+An end-to-end machine learning pipeline for Kaggle's [House Prices: Advanced Regression Techniques](https://www.kaggle.com/c/house-prices-advanced-regression-techniques) competition, combining careful feature engineering, per-model hyperparameter optimisation and weighted ensemble learning.
 
-This project achieved a **Top 200 worldwide Kaggle ranking** in the [House Prices: Advanced Regression Techniques](https://www.kaggle.com/c/house-prices-advanced-regression-techniques) competition with a **Leaderboard RMSE** of 0.11793.
+**Achievement: Top 100 worldwide Kaggle ranking (rank 97 at the time of writing), with a leaderboard RMSE of 0.11667.**
 
-![Leaderboard Result](images/leaderboard.png)
+![Kaggle leaderboard](images/leaderboard.png)
 
-> **Note on code availability:** The final competition submission pipeline is kept private, since publishing it would allow others to reproduce the exact solution for an active competition where this result ranks in the top 200. This repository contains simplified example implementations demonstrating the architecture, preprocessing workflow, and modelling approach without exposing the final submission code.
+> **Note:** the final submission pipeline that produced the top-100 result is kept private. This repository documents the approach and provides an example implementation.
 
----
+## Project Overview
 
-# Project Overview
+The task is to predict the final sale price of residential homes in Ames, Iowa, using 79 explanatory features describing almost every aspect of a property, including:
 
-The objective of this competition is to predict residential house sale prices from 79 property features, including:
-- Overall quality and condition
-- Living area and room sizes
-- Year built and renovation history
-- Basement and garage characteristics
-- Neighborhood information
-- External features and amenities
+- Lot and land characteristics (area, shape, frontage, slope)
+- Location and zoning (neighbourhood, proximity to roads and amenities)
+- Building type, style, quality and condition
+- Interior areas (living space, basement, bathrooms, bedrooms)
+- Garage, porch and outdoor features
+- Year built, remodelling history and sale details
 
 ## Evaluation Metric
 
-Submissions are scored using Root Mean Squared Error (RMSE) between the logarithm of the predicted price and the logarithm of the observed sale price - meaning proportional errors on expensive and cheap houses are penalised equally, which shaped several of the preprocessing decisions below.
+Submissions are scored on the root mean squared error between the logarithm of the predicted price and the logarithm of the observed sale price:
 
 $$
-\text{RMSE} =
-\sqrt{
-\frac{1}{n}
-\sum_{i=1}^{n}
-\left(
-\log(\hat{y}_i)-\log(y_i)
-\right)^2
-}
+\text{RMSE} = \sqrt{\frac{1}{n}\sum_{i=1}^{n}\left(\log(\hat{y}_i + 1) - \log(y_i + 1)\right)^2}
 $$
 
----
+Working in log space makes errors relative rather than absolute, so mispricing a cheap house and an expensive house by the same percentage is penalised equally.
 
-# Pipeline Architecture
+## Pipeline Architecture
 
-![Machine Learning Pipeline](images/pipeline.png)
+![Pipeline architecture](images/pipeline.png)
 
-Both `train.csv` and `test.csv` pass through the same cleaning, feature engineering, and preprocessing steps, fitted on the training data and applied consistently to the test set to avoid leakage.
+The pipeline applies identical preprocessing to the training and test sets, guaranteeing that the models always see consistently transformed features. Each model is then tuned independently with Optuna, using k-fold cross-validation to score every trial, before the tuned models are combined into a weighted ensemble.
 
-Each of the five models is tuned and validated independently - Optuna searches a model-specific hyperparameter space, evaluated using k-fold cross-validation, rather than sharing a single tuning pass across all models. Final predictions are generated independently from each model and combined using an ensemble strategy.
+## Feature Engineering
 
----
+Feature engineering choices are driven by the semantics of the data rather than blanket transformations:
 
-# Feature Engineering
+- **Ordinal encoding for quality features** — quality and condition ratings (e.g. `Ex`, `Gd`, `TA`, `Fa`, `Po`) carry a natural order, so they are mapped to ordinal scales instead of being one-hot encoded.
+- **Semantic missing-value handling** — missing values are filled according to what they actually mean: a missing basement feature indicates the house has no basement, not that the data is unknown.
+- **Derived area and age features** — total square footage, combined bathroom counts, house age and time since remodelling condense related raw columns into stronger signals.
+- **Aggregated quality indicators** — individual quality ratings are combined into overall quality scores that summarise the condition of the property.
+- **Selective interaction features** — a small number of interaction terms (e.g. quality × area) are added only where they demonstrably improve cross-validation performance.
 
-Rather than list every transformation, the notes below cover the reasoning behind the less obvious choices:
-
-- **Ordinal encoding over one-hot for quality features.** Fields like `ExterQual` or `KitchenQual` have a natural rank. One-hot encoding would discard that ordering and force models to relearn it from scratch; ordinal encoding preserves it directly.
-- **Missing values handled by meaning, not blanket imputation.** Many "missing" values in this dataset mean the feature doesn't apply (e.g. no garage, no basement) rather than data being genuinely absent. These were encoded as an explicit "none" category instead of median/mean imputation, which would have implied a typical garage existed where none does.
-- **Derived area and age features.** Total living area, total bathroom count, and property/remodel age were engineered because tree-based models split on individual columns - they do not automatically combine related measurements into higher-level domain features.
-- **Aggregated quality indicators.** Combining related quality/condition scores into a single index reduced redundant, highly correlated columns competing for importance during tuning.
-- **Interaction features** were added selectively where domain knowledge suggested an effect that's multiplicative rather than additive (e.g. quality mattering more in larger homes).
-
----
-
-# Models Used
-
-The final ensemble combines five complementary models, each independently tuned:
+## Models Used
 
 | Model | Purpose |
-|---|---|
-| LightGBM | Strong tabular baseline with efficient gradient boosting |
-| XGBoost | Alternative boosting approach capturing different tree structures |
-| CatBoost | Handles categorical relationships effectively |
-| HistGradientBoosting | Lightweight sklearn boosting model |
-| Ridge Regression | Adds linear diversity to reduce correlated errors |
+| --- | --- |
+| LightGBM | Fast gradient boosting, strong on tabular data with many features |
+| XGBoost | Regularised gradient boosting, robust to overfitting |
+| CatBoost | Gradient boosting with native handling of categorical features |
+| HistGradientBoosting | scikit-learn's histogram-based booster, adds diversity to the ensemble |
+| Ridge Regression | Penalised linear baseline that captures global linear structure |
 
-**Why an ensemble, and why these five:** the four boosting models capture non-linear feature interactions well but tend to make correlated errors, since they're built on similar splitting logic. Ridge Regression was included specifically for its *different* error profile - as a linear model, it fits the parts of the target that are well-explained by simple linear combinations, which boosting models can occasionally overfit around. Even where Ridge's standalone CV score was the weakest of the five, it still improved the blended result, because ensembling benefits more from prediction *diversity* than from any single model's raw accuracy.
+**Why an ensemble?** Each model makes different kinds of errors: the boosted trees capture non-linear interactions in different ways, while Ridge contributes a stable linear view of the data. Averaging their predictions cancels out uncorrelated errors and produces a lower overall RMSE than any single model achieves alone.
 
-Ensemble weights were set based on out-of-fold cross-validation performance for each model, rather than fixed evenly or hand-tuned to the public leaderboard - this reduces the risk of the weighting overfitting to leaderboard noise rather than genuine predictive strength.
+Ensemble weights are learned from out-of-fold (OOF) predictions: each model predicts the held-out folds during cross-validation, and the blend weights are optimised against these OOF predictions so that the weighting is never fitted on data a model has already seen.
 
----
+## Optimisation & Engineering
 
-# Optimisation & Engineering
+- **Cross-validation strategy** — k-fold cross-validation is used throughout, both for hyperparameter tuning and for ensemble weighting, giving reliable estimates of generalisation performance.
+- **Model-specific optimisation** — every model gets its own Optuna study with a search space tailored to its hyperparameters, rather than sharing a generic configuration.
+- **Reusable preprocessing pipeline** — preprocessing is packaged as a single pipeline applied identically to training and test data, eliminating train/test skew.
+- **Reproducibility** — fixed random seeds and persisted artefacts (via Joblib) make every run repeatable.
 
-Key engineering decisions used to improve model reliability and generalisation:
-
-- **Cross-validation strategy:** Used k-fold cross-validation with out-of-fold predictions to evaluate models and support ensemble optimisation.
-- **Model-specific optimisation:** Each model was tuned independently using appropriate hyperparameter search spaces rather than applying a single configuration across different model families.
-- **Reusable preprocessing pipeline:** Feature preparation was implemented as a consistent transformation workflow applied identically during training and inference, reducing the risk of train/test inconsistencies.
-- **Reproducibility:** Random seeds were controlled across experiments to ensure results could be reproduced reliably.
-
----
-
-# Technologies
+## Technologies
 
 - Python
 - pandas
@@ -100,22 +78,13 @@ Key engineering decisions used to improve model reliability and generalisation:
 - Optuna
 - Joblib
 
----
-# Installation + Setup Demo
-
-Install dependencies for the public example implementation:
+## Installation + Setup Demo
 
 ```bash
 pip install -r requirements-example.txt
-```
-
-```bash
 python example_model.py
 ```
----
 
-# License
+## License
 
-The example implementation and documentation are provided under the MIT License.
-
-The final competition submission pipeline, including the exact preprocessing, feature engineering, optimisation configuration, and ensemble strategy used for the leaderboard result, is not included.
+The example implementation in this repository is released under the MIT License. The final competition pipeline is not included in this repository.
