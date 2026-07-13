@@ -2,9 +2,9 @@
 
 An end-to-end machine learning pipeline for Kaggle's [House Prices: Advanced Regression Techniques](https://www.kaggle.com/c/house-prices-advanced-regression-techniques) competition, combining careful feature engineering, per-model hyperparameter optimisation and weighted ensemble learning.
 
-**Achievement: Top 100 worldwide Kaggle ranking (rank 97 at the time of writing), with a leaderboard RMSE of 0.11667.**
+**Achievement: Top 100 worldwide Kaggle ranking (rank 87 at the time of writing), with a leaderboard RMSE of 0.11667.**
 
-![Kaggle leaderboard](images/top100leaderboard.png)
+![Kaggle leaderboard](images/87leaderboard.png)
 
 > **Note:** the final submission pipeline that produced the top-100 result is kept private. This repository documents the approach and provides an example implementation.
 
